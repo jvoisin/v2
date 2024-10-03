@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"math"
 	"net/mail"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -21,12 +22,10 @@ import (
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/timezone"
 	"miniflux.app/v2/internal/urllib"
-
-	"github.com/gorilla/mux"
 )
 
 type funcMap struct {
-	router *mux.Router
+	router *http.ServeMux
 }
 
 // Map returns a map of template functions that are compiled during template parsing.

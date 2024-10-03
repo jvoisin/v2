@@ -18,16 +18,14 @@ import (
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/storage"
 	"miniflux.app/v2/internal/ui/session"
-
-	"github.com/gorilla/mux"
 )
 
 type middleware struct {
-	router *mux.Router
+	router *http.ServeMux
 	store  *storage.Storage
 }
 
-func newMiddleware(router *mux.Router, store *storage.Storage) *middleware {
+func newMiddleware(router *http.ServeMux, store *storage.Storage) *middleware {
 	return &middleware{router, store}
 }
 

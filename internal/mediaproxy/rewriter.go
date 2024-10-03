@@ -4,6 +4,7 @@
 package mediaproxy // import "miniflux.app/v2/internal/mediaproxy"
 
 import (
+	"net/http"
 	"slices"
 	"strings"
 
@@ -12,20 +13,19 @@ import (
 	"miniflux.app/v2/internal/urllib"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/gorilla/mux"
 )
 
-type urlProxyRewriter func(router *mux.Router, url string) string
+type urlProxyRewriter func(router *http.ServeMux, url string) string
 
-func RewriteDocumentWithRelativeProxyURL(router *mux.Router, htmlDocument string) string {
+func RewriteDocumentWithRelativeProxyURL(router *http.ServeMux, htmlDocument string) string {
 	return genericProxyRewriter(router, ProxifyRelativeURL, htmlDocument)
 }
 
-func RewriteDocumentWithAbsoluteProxyURL(router *mux.Router, htmlDocument string) string {
+func RewriteDocumentWithAbsoluteProxyURL(router *http.ServeMux, htmlDocument string) string {
 	return genericProxyRewriter(router, ProxifyAbsoluteURL, htmlDocument)
 }
 
-func genericProxyRewriter(router *mux.Router, proxifyFunction urlProxyRewriter, htmlDocument string) string {
+func genericProxyRewriter(router *http.ServeMux, proxifyFunction urlProxyRewriter, htmlDocument string) string {
 	proxyOption := config.Opts.MediaProxyMode()
 	if proxyOption == "none" {
 		return htmlDocument
@@ -95,7 +95,7 @@ func genericProxyRewriter(router *mux.Router, proxifyFunction urlProxyRewriter, 
 	return output
 }
 
-func proxifySourceSet(element *goquery.Selection, router *mux.Router, proxifyFunction urlProxyRewriter, proxyOption, srcsetAttrValue string) {
+func proxifySourceSet(element *goquery.Selection, router *http.ServeMux, proxifyFunction urlProxyRewriter, proxyOption, srcsetAttrValue string) {
 	imageCandidates := sanitizer.ParseSrcSetAttribute(srcsetAttrValue)
 
 	for _, imageCandidate := range imageCandidates {

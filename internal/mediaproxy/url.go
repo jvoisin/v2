@@ -4,19 +4,18 @@
 package mediaproxy // import "miniflux.app/v2/internal/mediaproxy"
 
 import (
+	"net/http"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"log/slog"
 	"net/url"
 
-	"github.com/gorilla/mux"
-
 	"miniflux.app/v2/internal/config"
 	"miniflux.app/v2/internal/http/route"
 )
 
-func ProxifyRelativeURL(router *mux.Router, mediaURL string) string {
+func ProxifyRelativeURL(router *http.ServeMux, mediaURL string) string {
 	if mediaURL == "" {
 		return ""
 	}
@@ -31,7 +30,7 @@ func ProxifyRelativeURL(router *mux.Router, mediaURL string) string {
 	return route.Path(router, "proxy", "encodedDigest", base64.URLEncoding.EncodeToString(digest), "encodedURL", base64.URLEncoding.EncodeToString([]byte(mediaURL)))
 }
 
-func ProxifyAbsoluteURL(router *mux.Router, mediaURL string) string {
+func ProxifyAbsoluteURL(router *http.ServeMux, mediaURL string) string {
 	if mediaURL == "" {
 		return ""
 	}

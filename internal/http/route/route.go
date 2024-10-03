@@ -5,12 +5,11 @@ package route // import "miniflux.app/v2/internal/http/route"
 
 import (
 	"strconv"
-
-	"github.com/gorilla/mux"
+	"net/http"
 )
 
 // Path returns the defined route based on given arguments.
-func Path(router *mux.Router, name string, args ...any) string {
+func Path(router *http.ServeMux, name string, args ...any) string {
 	route := router.Get(name)
 	if route == nil {
 		panic("route not found: " + name)

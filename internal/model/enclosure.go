@@ -3,9 +3,9 @@
 
 package model // import "miniflux.app/v2/internal/model"
 import (
+	"net/http"
 	"strings"
 
-	"github.com/gorilla/mux"
 	"miniflux.app/v2/internal/config"
 	"miniflux.app/v2/internal/mediaproxy"
 	"miniflux.app/v2/internal/urllib"
@@ -46,7 +46,7 @@ func (el EnclosureList) ContainsAudioOrVideo() bool {
 	return false
 }
 
-func (el EnclosureList) ProxifyEnclosureURL(router *mux.Router) {
+func (el EnclosureList) ProxifyEnclosureURL(router *http.ServeMux) {
 	proxyOption := config.Opts.MediaProxyMode()
 
 	if proxyOption == "all" || proxyOption != "none" {
@@ -63,7 +63,7 @@ func (el EnclosureList) ProxifyEnclosureURL(router *mux.Router) {
 	}
 }
 
-func (e *Enclosure) ProxifyEnclosureURL(router *mux.Router) {
+func (e *Enclosure) ProxifyEnclosureURL(router *http.ServeMux) {
 	proxyOption := config.Opts.MediaProxyMode()
 
 	if proxyOption == "all" || proxyOption != "none" && !urllib.IsHTTPS(e.URL) {

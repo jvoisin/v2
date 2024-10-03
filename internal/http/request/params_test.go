@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
-
-	"github.com/gorilla/mux"
 )
 
 func TestFormInt64Value(t *testing.T) {
@@ -42,7 +40,7 @@ func TestFormInt64Value(t *testing.T) {
 }
 
 func TestRouteStringParam(t *testing.T) {
-	router := mux.NewRouter()
+	router := http.ServeMux()
 	router.HandleFunc("/route/{variable}/index", func(w http.ResponseWriter, r *http.Request) {
 		result := RouteStringParam(r, "variable")
 		expected := "value"
@@ -69,7 +67,7 @@ func TestRouteStringParam(t *testing.T) {
 }
 
 func TestRouteInt64Param(t *testing.T) {
-	router := mux.NewRouter()
+	router := http.ServeMux()
 	router.HandleFunc("/a/{variable1}/b/{variable2}/c/{variable3}", func(w http.ResponseWriter, r *http.Request) {
 		result := RouteInt64Param(r, "variable1")
 		expected := int64(42)

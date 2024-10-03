@@ -24,7 +24,6 @@ import (
 	"miniflux.app/v2/internal/version"
 	"miniflux.app/v2/internal/worker"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
@@ -172,8 +171,8 @@ func startHTTPServer(server *http.Server) {
 	}()
 }
 
-func setupHandler(store *storage.Storage, pool *worker.Pool) *mux.Router {
-	router := mux.NewRouter()
+func setupHandler(store *storage.Storage, pool *worker.Pool) *http.ServeMux {
+	router := http.NewServeMux()
 
 	if config.Opts.BasePath() != "" {
 		router = router.PathPrefix(config.Opts.BasePath()).Subrouter()

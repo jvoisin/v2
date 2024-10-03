@@ -8,7 +8,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"miniflux.app/v2/internal/config"
 )
 
@@ -25,7 +24,7 @@ func TestProxyFilterWithHttpDefault(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="http://website/folder/image.png" alt="Test"/></p>`
@@ -49,7 +48,7 @@ func TestProxyFilterWithHttpsDefault(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="https://website/folder/image.png" alt="Test"/></p>`
@@ -72,7 +71,7 @@ func TestProxyFilterWithHttpNever(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="http://website/folder/image.png" alt="Test"/></p>`
@@ -95,7 +94,7 @@ func TestProxyFilterWithHttpsNever(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="https://website/folder/image.png" alt="Test"/></p>`
@@ -120,7 +119,7 @@ func TestProxyFilterWithHttpAlways(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="http://website/folder/image.png" alt="Test"/></p>`
@@ -145,7 +144,7 @@ func TestProxyFilterWithHttpsAlways(t *testing.T) {
 		t.Fatalf(`Parsing failure: %v`, err)
 	}
 
-	r := mux.NewRouter()
+	r := http.NewServeMux()
 	r.HandleFunc("/proxy/{encodedDigest}/{encodedURL}", func(w http.ResponseWriter, r *http.Request) {}).Name("proxy")
 
 	input := `<p><img src="https://website/folder/image.png" alt="Test"/></p>`

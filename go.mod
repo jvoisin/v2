@@ -8,7 +8,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/go-webauthn/webauthn v0.11.2
-	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.20.4
 	github.com/tdewolff/minify/v2 v2.20.37

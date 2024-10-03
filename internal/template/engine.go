@@ -4,6 +4,7 @@
 package template // import "miniflux.app/v2/internal/template"
 
 import (
+	"net/http"
 	"bytes"
 	"embed"
 	"html/template"
@@ -12,8 +13,6 @@ import (
 	"time"
 
 	"miniflux.app/v2/internal/locale"
-
-	"github.com/gorilla/mux"
 )
 
 //go:embed templates/common/*.html
@@ -32,7 +31,7 @@ type Engine struct {
 }
 
 // NewEngine returns a new template engine.
-func NewEngine(router *mux.Router) *Engine {
+func NewEngine(router *http.ServeMux) *Engine {
 	return &Engine{
 		templates: make(map[string]*template.Template),
 		funcMap:   &funcMap{router},

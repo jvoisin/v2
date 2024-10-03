@@ -9,12 +9,10 @@ import (
 	"miniflux.app/v2/internal/storage"
 	"miniflux.app/v2/internal/template"
 	"miniflux.app/v2/internal/worker"
-
-	"github.com/gorilla/mux"
 )
 
 // Serve declares all routes for the user interface.
-func Serve(router *mux.Router, store *storage.Storage, pool *worker.Pool) {
+func Serve(router *http.ServeMux, store *storage.Storage, pool *worker.Pool) {
 	middleware := newMiddleware(router, store)
 
 	templateEngine := template.NewEngine(router)
@@ -30,7 +28,7 @@ func Serve(router *mux.Router, store *storage.Storage, pool *worker.Pool) {
 	uiRouter.StrictSlash(true)
 
 	// Static assets.
-	uiRouter.HandleFunc("/stylesheets/{name}.{checksum}.css", handler.showStylesheet).Name("stylesheet").Methods(http.MethodGet)
+	uiRouter.HandleFunc("GET /stylesheets/{name}.{checksum}.css", handler.showStylesheet).Name("stylesheet")
 	uiRouter.HandleFunc("/{name}.{checksum}.js", handler.showJavascript).Name("javascript").Methods(http.MethodGet)
 	uiRouter.HandleFunc("/favicon.ico", handler.showFavicon).Name("favicon").Methods(http.MethodGet)
 	uiRouter.HandleFunc("/icon/{filename}", handler.showAppIcon).Name("appIcon").Methods(http.MethodGet)
