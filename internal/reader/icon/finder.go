@@ -4,8 +4,14 @@
 package icon // import "miniflux.app/v2/internal/reader/icon"
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/url"
@@ -19,6 +25,7 @@ import (
 	"miniflux.app/v2/internal/urllib"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/image/draw"
 	"golang.org/x/net/html/charset"
 )
 
@@ -180,7 +187,41 @@ func (f *IconFinder) DownloadIcon(iconURL string) (*model.Icon, error) {
 		Content:  responseBody,
 	}
 
+	icon = resizeIcon(icon)
+
 	return icon, nil
+}
+
+func resizeIcon(icon *model.Icon) *model.Icon {
+	var src image.Image
+	var err error
+
+	r := bytes.NewReader(icon.Content)
+	switch icon.MimeType {
+	case "image/jpeg":
+		src, err = jpeg.Decode(r)
+	case "image/png":
+		src, err = png.Decode(r)
+	case "image/gif":
+		src, err = gif.Decode(r)
+	default:
+		return icon
+	}
+	if err != nil {
+		return icon
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	draw.BiLinear.Scale(dst, dst.Rect, src, src.Bounds(), draw.Over, nil)
+
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	if err = png.Encode(w, dst); err == nil {
+		icon.Content = b.Bytes()
+		icon.MimeType = "image/png"
+	}
+
+	return icon
 }
 
 func findIconURLsFromHTMLDocument(body io.Reader, contentType string) ([]string, error) {
