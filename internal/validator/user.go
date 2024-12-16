@@ -6,6 +6,7 @@ package validator // import "miniflux.app/v2/internal/validator"
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	"miniflux.app/v2/internal/locale"
 	"miniflux.app/v2/internal/model"
@@ -20,6 +21,10 @@ func ValidateUserCreationWithPassword(store *storage.Storage, request *model.Use
 
 	if store.UserExists(request.Username) {
 		return locale.NewLocalizedError("error.user_already_exists")
+	}
+
+	if err := validateUsername(request.Username); err != nil {
+		return err
 	}
 
 	if err := validatePassword(request.Password); err != nil {
@@ -142,6 +147,15 @@ func validateReadingSpeed(readingSpeed int) *locale.LocalizedError {
 func validatePassword(password string) *locale.LocalizedError {
 	if len(password) < 6 {
 		return locale.NewLocalizedError("error.password_min_length")
+	}
+	return nil
+}
+
+func validateUsername(username string) *locale.LocalizedError {
+	if strings.ContainsFunc(username, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsNumber(r))
+	}) {
+		return locale.NewLocalizedError("error.invalid_username")
 	}
 	return nil
 }
