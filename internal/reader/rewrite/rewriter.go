@@ -8,12 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"text/scanner"
+	"unicode"
 
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/urllib"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 type rule struct {
@@ -94,8 +92,26 @@ func (rule rule) applyRule(entryURL string, entry *model.Entry) {
 	case "remove_tables":
 		entry.Content = removeTables(entry.Content)
 	case "remove_clickbait":
-		entry.Title = cases.Title(language.English).String(strings.ToLower(entry.Title))
+		entry.Title = titlelize(entry.Title)
 	}
+}
+
+// titlelize returns a copy of the string s with all Unicode letters that begin words
+// mapped to their Unicode title case.
+func titlelize(s string) string {
+	// A closure is used here to remember the previous character
+	// so that we can check if there is a space preceding the current
+	// character.
+	previous := ' '
+	return strings.Map(
+		func(current rune) rune {
+			if unicode.IsSpace(previous) {
+				previous = current
+				return unicode.ToTitle(current)
+			}
+			previous = current
+			return current
+		}, strings.ToLower(s))
 }
 
 // Rewriter modify item contents with a set of rewriting rules.
