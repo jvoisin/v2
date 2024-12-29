@@ -5,13 +5,14 @@ package database // import "miniflux.app/v2/internal/database"
 
 import (
 	"database/sql"
+	"fmt"
 )
 
 var schemaVersion = len(migrations)
 
 // Order is important. Add new migrations at the end of the list.
 var migrations = []func(tx *sql.Tx, driver string) error{
-	func(tx *sql.Tx, _ string) (err error) {
+	func(tx *sql.Tx, driver string) (err error) {
 		sql := `
 			CREATE TABLE schema_version (
 				version text not null
@@ -25,7 +26,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				language text default 'en_US',
 				timezone text default 'UTC',
 				theme text default 'default',
-				last_login_at timestamp with time zone,
+				last_login_at timestamptz,
 				primary key (id)
 			);
 
@@ -33,7 +34,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				id serial not null,
 				user_id int not null,
 				token text not null unique,
-				created_at timestamp with time zone default now(),
+				created_at timestamptz default CURRENT_TIMESTAMP,
 				user_agent text,
 				ip text,
 				primary key (id),
@@ -57,7 +58,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				title text not null,
 				feed_url text not null,
 				site_url text not null,
-				checked_at timestamp with time zone default now(),
+				checked_at timestamptz default CURRENT_TIMESTAMP,
 				etag_header text default '',
 				last_modified_header text default '',
 				parsing_error_msg text default '',
@@ -68,26 +69,22 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				foreign key (category_id) references categories(id) on delete cascade
 			);
 
-			CREATE TYPE entry_status as enum('unread', 'read', 'removed');
-
 			CREATE TABLE entries (
 				id bigserial not null,
 				user_id int not null,
 				feed_id bigint not null,
 				hash text not null,
-				published_at timestamp with time zone not null,
+				published_at timestamptz not null,
 				title text not null,
 				url text not null,
 				author text,
 				content text,
-				status entry_status default 'unread',
+				status text CHECK(status in ('unread', 'read', 'removed')) default 'unread',
 				primary key (id),
 				unique (feed_id, hash),
 				foreign key (user_id) references users(id) on delete cascade,
 				foreign key (feed_id) references feeds(id) on delete cascade
 			);
-
-			CREATE INDEX entries_feed_idx on entries using btree(feed_id);
 
 			CREATE TABLE enclosures (
 				id bigserial not null,
@@ -117,8 +114,18 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				foreign key (icon_id) references icons(id) on delete cascade
 			);
 		`
+		if _, err = tx.Exec(sql); err != nil {
+			return err
+		}
+
+		if driver == "postgresql" {
+			sql = `CREATE INDEX entries_feed_idx on entries using btree(feed_id);`
+		} else {
+			sql = `CREATE INDEX entries_feed_idx on entries(feed_id);`
+		}
 		_, err = tx.Exec(sql)
 		return err
+
 	},
 	func(tx *sql.Tx, driver string) (err error) {
 		if driver == "postgresql" {
@@ -137,7 +144,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 			CREATE TABLE tokens (
 				id text not null,
 				value text not null,
-				created_at timestamp with time zone not null default now(),
+				created_at timestamptz not null default CURRENT_TIMESTAMP,
 				primary key(id, value)
 			);
 		`
@@ -146,8 +153,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			CREATE TYPE entry_sorting_direction AS enum('asc', 'desc');
-			ALTER TABLE users ADD COLUMN entry_direction entry_sorting_direction default 'asc';
+			ALTER TABLE users ADD COLUMN entry_direction text CHECK(entry_direction in ('asc', 'desc')) default 'asc';
 		`
 		_, err = tx.Exec(sql)
 		return err
@@ -200,7 +206,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 			CREATE TABLE sessions (
 				id text not null,
 				data jsonb not null,
-				created_at timestamp with time zone not null default now(),
+				created_at timestamptz not null default CURRENT_TIMESTAMP,
 				primary key(id)
 			);
 		`
@@ -241,10 +247,13 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `ALTER TABLE enclosures ALTER COLUMN size SET DATA TYPE bigint`
-		_, err = tx.Exec(sql)
-		return err
+	func(tx *sql.Tx, driver string) (err error) {
+		if driver == "postgresql" {
+			sql := `ALTER TABLE enclosures ALTER COLUMN size SET DATA TYPE bigint`
+			_, err = tx.Exec(sql)
+			return err
+		}
+		return nil
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `ALTER TABLE entries ADD COLUMN comments_url text default ''`
@@ -260,12 +269,15 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
+	func(tx *sql.Tx, driver string) (err error) {
+		if driver == "postgresql" {
+			sql := `
 			ALTER TABLE user_sessions ALTER COLUMN ip SET DATA TYPE inet using ip::inet;
-		`
-		_, err = tx.Exec(sql)
-		return err
+			`
+			_, err = tx.Exec(sql)
+			return err
+		}
+		return nil
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
@@ -275,12 +287,20 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		if driver == "postgresql" {
+			sql = `
 			ALTER TABLE entries ADD COLUMN document_vectors tsvector;
 			UPDATE entries SET document_vectors = to_tsvector(substring(title || ' ' || coalesce(content, '') for 1000000));
 			CREATE INDEX document_vectors_idx ON entries USING gin(document_vectors);
-		`
+			`
+		} else {
+			//TODO: add full-text search in sqlite
+			sql = `
+			ALTER TABLE entries ADD COLUMN document_vectors text;
+			`
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
@@ -289,15 +309,18 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
+	func(tx *sql.Tx, driver string) (err error) {
+		if driver == "postgresql" {
+			sql := `
 			UPDATE
-				entries
+			entries
 			SET
-				document_vectors = setweight(to_tsvector(substring(coalesce(title, '') for 1000000)), 'A') || setweight(to_tsvector(substring(coalesce(content, '') for 1000000)), 'B')
-		`
-		_, err = tx.Exec(sql)
-		return err
+			document_vectors = setweight(to_tsvector(substring(coalesce(title, '') for 1000000)), 'A') || setweight(to_tsvector(substring(coalesce(content, '') for 1000000)), 'B')
+			`
+			_, err = tx.Exec(sql)
+			return err
+		}
+		return nil
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `ALTER TABLE users ADD COLUMN keyboard_shortcuts boolean default 't'`
@@ -309,9 +332,26 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
-			ALTER TABLE users ALTER COLUMN theme SET DEFAULT 'light_serif';
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `ALTER TABLE users ALTER COLUMN theme SET DEFAULT 'light_serif';`
+		case "sqlite3": // sqlite doesn't support altering default values on existing columns
+			sql = `
+			ALTER TABLE users ADD COLUMN theme_new DEFAULT 'light_serif';
+			UPDATE users SET theme_new = theme;
+			ALTER TABLE users DROP COLUMN theme;
+			ALTER TABLE users RENAME COLUMN theme_new TO theme;
+			`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
+		if _, err = tx.Exec(sql); err != nil {
+			return err
+		}
+
+		sql = `
 			UPDATE users SET theme='light_serif' WHERE theme='default';
 			UPDATE users SET theme='light_sans_serif' WHERE theme='sansserif';
 			UPDATE users SET theme='dark_serif' WHERE theme='black';
@@ -319,12 +359,27 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
+	func(tx *sql.Tx, driver string) (err error) {
 		sql := `
-			ALTER TABLE entries ADD COLUMN changed_at timestamp with time zone;
+			ALTER TABLE entries ADD COLUMN changed_at timestamptz;
 			UPDATE entries SET changed_at = published_at;
-			ALTER TABLE entries ALTER COLUMN changed_at SET not null;
 		`
+		if _, err = tx.Exec(sql); err != nil {
+			return err
+		}
+		switch driver {
+		case "postgresql":
+			sql = "ALTER TABLE entries ALTER COLUMN changed_at SET not null;"
+		case "sqlite3": // sqlite doesn't support altering constrains
+			sql = `
+			ALTER TABLE entries ADD COLUMN changed_at_new not null;
+			UPDATE entries SET changed_at_new = changed_at;
+			ALTER TABLE entries DROP COLUMN changed_at;
+			ALTER TABLE entries RENAME COLUMN changed_at_new TO changed_at;
+			`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
@@ -335,8 +390,8 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				user_id int not null references users(id) on delete cascade,
 				token text not null unique,
 				description text not null,
-				last_used_at timestamp with time zone,
-				created_at timestamp with time zone default now(),
+				last_used_at timestamptz,
+				created_at timestamptz default CURRENT_TIMESTAMP,
 				primary key(id),
 				unique (user_id, description)
 			);
@@ -344,22 +399,41 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `
 			ALTER TABLE entries ADD COLUMN share_code text not null default '';
 			CREATE UNIQUE INDEX entries_share_code_idx ON entries USING btree(share_code) WHERE share_code <> '';
-		`
+			`
+		case "sqlite3":
+			sql = `
+			ALTER TABLE entries ADD COLUMN share_code text not null default '';
+			CREATE UNIQUE INDEX entries_share_code_idx ON entries(share_code) WHERE share_code <> '';
+			`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `CREATE INDEX enclosures_user_entry_url_idx ON enclosures(user_id, entry_id, md5(url))`
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `CREATE INDEX enclosures_user_entry_url_idx ON enclosures(user_id, entry_id, md5(url))`
+		case "sqlite3":
+			sql = `CREATE INDEX enclosures_user_entry_url_idx ON enclosures(user_id, entry_id, url)`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			ALTER TABLE feeds ADD COLUMN next_check_at timestamp with time zone default now();
+			ALTER TABLE feeds ADD COLUMN next_check_at timestamptz default CURRENT_TIMESTAMP;
 			CREATE INDEX entries_user_feed_idx ON entries (user_id, feed_id);
 		`
 		_, err = tx.Exec(sql)
@@ -380,8 +454,16 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `CREATE INDEX entries_id_user_status_idx ON entries USING btree (id, user_id, status)`
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `CREATE INDEX entries_id_user_status_idx ON entries USING btree (id, user_id, status)`
+		case "sqlite3":
+			sql = `CREATE INDEX entries_id_user_status_idx ON entries (id, user_id, status)`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
@@ -390,8 +472,16 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `CREATE INDEX entries_feed_id_status_hash_idx ON entries USING btree (feed_id, status, hash)`
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `CREATE INDEX entries_feed_id_status_hash_idx ON entries USING btree (feed_id, status, hash)`
+		case "sqlite3":
+			sql = `CREATE INDEX entries_feed_id_status_hash_idx ON entries (feed_id, status, hash)`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		_, err = tx.Exec(sql)
 		return err
 	},
@@ -412,9 +502,8 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			ALTER TABLE feeds
-				ADD COLUMN blocklist_rules text not null default '',
-				ADD COLUMN keeplist_rules text not null default ''
+			ALTER TABLE feeds ADD COLUMN blocklist_rules text not null default '';
+			ALTER TABLE feeds ADD COLUMN keeplist_rules text not null default ''
 		`
 		_, err = tx.Exec(sql)
 		return err
@@ -426,7 +515,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			ALTER TABLE entries ADD COLUMN created_at timestamp with time zone not null default now();
+			ALTER TABLE entries ADD COLUMN created_at timestamptz not null default CURRENT_TIMESTAMP;
 			UPDATE entries SET created_at = published_at;
 		`
 		_, err = tx.Exec(sql)
@@ -434,10 +523,9 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, driver string) (err error) {
 		_, err = tx.Exec(`
-			ALTER TABLE users
-				ADD column stylesheet text not null default '',
-				ADD column google_id text not null default '',
-				ADD column openid_connect_id text not null default ''
+			ALTER TABLE users ADD column stylesheet text not null default '';
+			ALTER TABLE users ADD column google_id text not null default '';
+			ALTER TABLE users ADD column openid_connect_id text not null default '';
 		`)
 		if err != nil {
 			return err
@@ -531,8 +619,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			CREATE TYPE webapp_display_mode AS enum('fullscreen', 'standalone', 'minimal-ui', 'browser');
-			ALTER TABLE users ADD COLUMN display_mode webapp_display_mode default 'standalone';
+			ALTER TABLE users ADD COLUMN display_mode text CHECK(display_mode IN ('fullscreen', 'standalone', 'minimal-ui', 'browser')) default 'standalone';
 		`
 		_, err = tx.Exec(sql)
 		return err
@@ -565,8 +652,7 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			CREATE TYPE entry_sorting_order AS enum('published_at', 'created_at');
-			ALTER TABLE users ADD COLUMN entry_order entry_sorting_order default 'published_at';
+			ALTER TABLE users ADD COLUMN entry_order text CHECK(entry_order in ('published_at', 'created_at')) default 'published_at';
 		`
 		_, err = tx.Exec(sql)
 		return err
@@ -647,17 +733,31 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		return err
 	},
 	func(tx *sql.Tx, _ string) (err error) {
+		// TODO sqlite doesn't support arrays
 		_, err = tx.Exec(`
 			ALTER TABLE entries ADD COLUMN tags text[] default '{}';
 		`)
 		return
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		sql := `
+	func(tx *sql.Tx, driver string) (err error) {
+		sql := ""
+		switch driver {
+		case "postgresql":
+			sql = `
 			ALTER TABLE users RENAME double_tap TO gesture_nav;
 			ALTER TABLE users ALTER COLUMN gesture_nav SET DATA TYPE text using case when gesture_nav = true then 'tap' when gesture_nav = false then 'none' end;
 			ALTER TABLE users ALTER COLUMN gesture_nav SET default 'tap';
-		`
+			`
+		case "sqlite3":
+			sql = `
+			ALTER TABLE users ADD COLUMN gesture_nav DEFAULT 'tap';
+			UPDATE users SET gesture_nav = 'none' WHERE double_tap = false;
+			ALTER TABLE users DROP COLUMN double_tap;
+			`
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
+
 		_, err = tx.Exec(sql)
 		return err
 	},
@@ -683,14 +783,17 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
+	func(tx *sql.Tx, driver string) (err error) {
 		// Delete duplicated rows
 		sql := `
-			DELETE FROM enclosures a USING enclosures b
-			WHERE a.id < b.id
-				AND a.user_id = b.user_id
-				AND a.entry_id = b.entry_id
-				AND a.url = b.url;
+			DELETE FROM enclosures
+			WHERE EXISTS (
+				SELECT 1 FROM enclosures e2
+				WHERE id < e2.id
+					AND user_id = e2.user_id
+					AND entry_id = e2.entry_id
+					AND url = e2.url
+			);
 		`
 		_, err = tx.Exec(sql)
 		if err != nil {
@@ -704,7 +807,14 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		}
 
 		// Create unique index
-		_, err = tx.Exec(`CREATE UNIQUE INDEX enclosures_user_entry_url_unique_idx ON enclosures(user_id, entry_id, md5(url))`)
+		switch driver {
+		case "postgresql":
+			_, err = tx.Exec(`CREATE UNIQUE INDEX enclosures_user_entry_url_unique_idx ON enclosures(user_id, entry_id, md5(url))`)
+		case "sqlite3":
+			_, err = tx.Exec(`CREATE UNIQUE INDEX enclosures_user_entry_url_unique_idx ON enclosures(user_id, entry_id, url)`)
+		default:
+			panic(fmt.Sprintf("driver %s isn't supported", driver))
+		}
 		if err != nil {
 			return err
 		}
@@ -828,8 +938,8 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 				sign_count bigint,
 				clone_warning bool,
 				name text,
-				added_on timestamp with time zone default now(),
-				last_seen_on timestamp with time zone default now()
+				added_on timestamptz default CURRENT_TIMESTAMP,
+				last_seen_on timestamptz default CURRENT_TIMESTAMP
 			);
 		`)
 		return
@@ -885,11 +995,14 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 		_, err = tx.Exec(sql)
 		return err
 	},
-	func(tx *sql.Tx, _ string) (err error) {
-		// the WHERE part speed-up the request a lot
-		sql := `UPDATE entries SET tags = array_remove(tags, '') WHERE '' = ANY(tags);`
-		_, err = tx.Exec(sql)
-		return err
+	func(tx *sql.Tx, driver string) (err error) {
+		if driver == "postgresql" {
+			// the WHERE part speed-up the request a lot
+			sql := `UPDATE entries SET tags = array_remove(tags, '') WHERE '' = ANY(tags);`
+			_, err = tx.Exec(sql)
+			return err
+		}
+		return nil
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		// Entry URLs can exceeds btree maximum size
@@ -914,9 +1027,8 @@ var migrations = []func(tx *sql.Tx, driver string) error{
 	},
 	func(tx *sql.Tx, _ string) (err error) {
 		sql := `
-			ALTER TABLE users
-				ADD COLUMN block_filter_entry_rules text not null default '',
-				ADD COLUMN keep_filter_entry_rules text not null default ''
+			ALTER TABLE users ADD COLUMN block_filter_entry_rules text not null default '';
+			ALTER TABLE users ADD COLUMN keep_filter_entry_rules text not null default '';
 		`
 		_, err = tx.Exec(sql)
 		return err
