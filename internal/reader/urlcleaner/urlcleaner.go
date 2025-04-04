@@ -87,6 +87,9 @@ var trackingParams = map[string]bool{
 	// Branch.io
 	"_branch_match_id": true,
 	"_branch_referrer": true,
+
+	// Ghost
+	"ref": true,
 }
 
 func RemoveTrackingParameters(inputURL string) (string, error) {
