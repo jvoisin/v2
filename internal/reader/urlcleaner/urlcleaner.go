@@ -89,7 +89,13 @@ var trackingParams = map[string]bool{
 	"_branch_referrer": true,
 }
 
-func RemoveTrackingParameters(inputURL string) (string, error) {
+// Outbound tracking parameters are appending the website's url to outbound links.
+var trackingParamsOutbound = map[string]bool{
+	// Ghost
+	"ref": true,
+}
+
+func RemoveTrackingParameters(baseUrl, feedUrl, inputURL string) (string, error) {
 	parsedURL, err := url.Parse(inputURL)
 	if err != nil {
 		return "", fmt.Errorf("urlcleaner: error parsing URL: %v", err)
@@ -98,6 +104,11 @@ func RemoveTrackingParameters(inputURL string) (string, error) {
 	if !strings.HasPrefix(parsedURL.Scheme, "http") {
 		return inputURL, nil
 	}
+
+	baseUrl = strings.TrimPrefix(baseUrl, "https://")
+	baseUrl = strings.TrimPrefix(baseUrl, "http://")
+	feedUrl = strings.TrimPrefix(feedUrl, "https://")
+	feedUrl = strings.TrimPrefix(feedUrl, "http://")
 
 	queryParams := parsedURL.Query()
 	hasTrackers := false
@@ -108,6 +119,16 @@ func RemoveTrackingParameters(inputURL string) (string, error) {
 		if trackingParams[lowerParam] || strings.HasPrefix(lowerParam, "utm_") {
 			queryParams.Del(param)
 			hasTrackers = true
+		}
+		if trackingParamsOutbound[lowerParam] {
+			// handle things like ?a=b&a=c&a=d…
+			for _, value := range queryParams[param] {
+				if strings.HasPrefix(value, baseUrl) || strings.HasPrefix(value, feedUrl) {
+					queryParams.Del(param)
+					hasTrackers = true
+					break
+				}
+			}
 		}
 	}
 
