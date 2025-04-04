@@ -63,6 +63,21 @@ func TestRemoveTrackingParams(t *testing.T) {
 			expected: "https://example.com/page?name=John+Doe",
 		},
 		{
+			name:     "reg parameter for another url",
+			input:    "https://example.com/page?ref=test.com",
+			expected: "https://example.com/page?ref=test.com",
+		},
+		{
+			name:     "reg parameter for base url",
+			input:    "https://example.com/page?ref=feed.com",
+			expected: "https://example.com/page",
+		},
+		{
+			name:     "reg parameter for site url",
+			input:    "https://example.com/page?ref=example.com",
+			expected: "https://example.com/page",
+		},
+		{
 			name:             "Non-standard URL parameter with no tracker",
 			input:            "https://example.com/foo.jpg?crop/1420x708/format/webp",
 			expected:         "https://example.com/foo.jpg?crop/1420x708/format/webp",
@@ -83,7 +98,7 @@ func TestRemoveTrackingParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := RemoveTrackingParameters(tt.input)
+			result, err := RemoveTrackingParameters("example.com", "feed.com", tt.input)
 			if tt.expected == "" {
 				if err == nil {
 					t.Errorf("Expected an error for invalid URL, but got none")
