@@ -78,12 +78,21 @@ func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
 			title=$1,
 			content=$2,
 			reading_time=$3,
-			document_vectors = setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($2, ''), 500000)), 'B')
+			document_vectors = setweight(to_tsvector($1), 'A') || setweight(to_tsvector($2), 'B')
 		WHERE
 			id=$4 AND user_id=$5
 	`
 
-	if _, err := s.db.Exec(query, entry.Title, entry.Content, entry.ReadingTime, entry.ID, entry.UserID); err != nil {
+	title := entry.Title
+	if len(title) > 500000 {
+		title = title[:500000]
+	}
+	content := entry.Content
+	if len(content) > 500000 {
+		content = content[:500000]
+	}
+
+	if _, err := s.db.Exec(query, title, content, entry.ReadingTime, entry.ID, entry.UserID); err != nil {
 		return fmt.Errorf(`store: unable to update entry #%d: %v`, entry.ID, err)
 	}
 
@@ -92,6 +101,15 @@ func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
 
 // createEntry add a new entry.
 func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
+	title := entry.Title
+	if len(title) > 500000 {
+		title = title[:500000]
+	}
+	content := entry.Content
+	if len(content) > 500000 {
+		content = content[:500000]
+	}
+
 	query := `
 		INSERT INTO entries
 			(
@@ -122,7 +140,7 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 				$9,
 				$10,
 				now(),
-				setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($6, ''), 500000)), 'B'),
+				setweight(to_tsvector($1), 'A') || setweight(to_tsvector($6), 'B'),
 				$11
 			)
 		RETURNING
@@ -130,12 +148,12 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 	`
 	err := tx.QueryRow(
 		query,
-		entry.Title,
+		title,
 		entry.Hash,
 		entry.URL,
 		entry.CommentsURL,
 		entry.Date,
-		entry.Content,
+		content,
 		entry.Author,
 		entry.UserID,
 		entry.FeedID,
@@ -168,6 +186,14 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 // Note: we do not update the published date because some feeds do not contains any date,
 // it default to time.Now() which could change the order of items on the history page.
 func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
+	title := entry.Title
+	if len(title) > 500000 {
+		title = title[:500000]
+	}
+	content := entry.Content
+	if len(content) > 500000 {
+		content = content[:500000]
+	}
 	query := `
 		UPDATE
 			entries
@@ -178,7 +204,7 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 			content=$4,
 			author=$5,
 			reading_time=$6,
-			document_vectors = setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($4, ''), 500000)), 'B'),
+			document_vectors = setweight(to_tsvector($1), 'A') || setweight(to_tsvector($4), 'B'),
 			tags=$10
 		WHERE
 			user_id=$7 AND feed_id=$8 AND hash=$9
@@ -187,10 +213,10 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 	`
 	err := tx.QueryRow(
 		query,
-		entry.Title,
+		title,
 		entry.URL,
 		entry.CommentsURL,
-		entry.Content,
+		content,
 		entry.Author,
 		entry.ReadingTime,
 		entry.UserID,
