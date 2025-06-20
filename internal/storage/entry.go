@@ -78,12 +78,12 @@ func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
 			title=$1,
 			content=$2,
 			reading_time=$3,
-			document_vectors = setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($2, ''), 500000)), 'B')
+			document_vectors = setweight(to_tsvector($1), 'A') || setweight(to_tsvector($2), 'B')
 		WHERE
 			id=$4 AND user_id=$5
 	`
 
-	if _, err := s.db.Exec(query, entry.Title, entry.Content, entry.ReadingTime, entry.ID, entry.UserID); err != nil {
+	if _, err := s.db.Exec(query, truncateString(entry.Title, 500000), truncateString(entry.Content, 500000), entry.ReadingTime, entry.ID, entry.UserID); err != nil {
 		return fmt.Errorf(`store: unable to update entry #%d: %v`, entry.ID, err)
 	}
 
@@ -122,7 +122,7 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 				$9,
 				$10,
 				now(),
-				setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($6, ''), 500000)), 'B'),
+				setweight(to_tsvector($1), 'A') || setweight(to_tsvector($6), 'B'),
 				$11
 			)
 		RETURNING
@@ -130,12 +130,12 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 	`
 	err := tx.QueryRow(
 		query,
-		entry.Title,
+		truncateString(entry.Title, 500000),
 		entry.Hash,
 		entry.URL,
 		entry.CommentsURL,
 		entry.Date,
-		entry.Content,
+		truncateString(entry.Content, 500000),
 		entry.Author,
 		entry.UserID,
 		entry.FeedID,
@@ -178,7 +178,7 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 			content=$4,
 			author=$5,
 			reading_time=$6,
-			document_vectors = setweight(to_tsvector(left(coalesce($1, ''), 500000)), 'A') || setweight(to_tsvector(left(coalesce($4, ''), 500000)), 'B'),
+			document_vectors = setweight(to_tsvector($1), 'A') || setweight(to_tsvector($4), 'B'),
 			tags=$10
 		WHERE
 			user_id=$7 AND feed_id=$8 AND hash=$9
@@ -187,10 +187,10 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 	`
 	err := tx.QueryRow(
 		query,
-		entry.Title,
+		truncateString(entry.Title, 500000),
 		entry.URL,
 		entry.CommentsURL,
-		entry.Content,
+		truncateString(entry.Content, 500000),
 		entry.Author,
 		entry.ReadingTime,
 		entry.UserID,
@@ -641,4 +641,11 @@ func removeEmpty(l []string) []string {
 		}
 	}
 	return finalSlice
+}
+
+func truncateString(s string, maxlen int) string {
+	if len(s) > maxlen {
+		return s[:maxlen]
+	}
+	return s
 }
