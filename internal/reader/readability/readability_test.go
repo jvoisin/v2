@@ -5,9 +5,12 @@ package readability // import "miniflux.app/v2/internal/reader/readability"
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 func TestBaseURL(t *testing.T) {
@@ -201,6 +204,41 @@ func BenchmarkExtractContent(b *testing.B) {
 	for range b.N {
 		for _, v := range testCases {
 			ExtractContent(bytes.NewReader(v))
+		}
+	}
+}
+
+func TestGetLinkDensity(t *testing.T) {
+	tests := []struct {
+		html  string
+		score float32
+	}{
+		{
+			`<p>no links at all here</p>`,
+			0.0,
+		},
+		{
+			`<p>this is a great <a>test</a>.</p>`,
+			0.19,
+		},
+		{
+			`<p>this is a test
+			with some <i>nested<b>elements<a>and a link</a>deeply</b>nested</i>.</p>
+			and a bunch of padding to make the score a bit low`,
+			0.084,
+		},
+	}
+
+	const float64EqualityThreshold = 1e-3
+	for _, test := range tests {
+		document, err := goquery.NewDocumentFromReader(strings.NewReader(test.html))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := getLinkDensity(document.Selection)
+
+		if math.Abs(float64(f-test.score)) > float64EqualityThreshold {
+			t.Errorf(`Invalid count, got %f instead of %f`, f, test.score)
 		}
 	}
 }
