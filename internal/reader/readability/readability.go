@@ -122,8 +122,7 @@ func getArticle(topCandidate *candidate, candidates candidateList) string {
 			} else {
 				if linkDensity == 0 {
 					// It's a small selection, so .Text doesn't impact performances too much.
-					content := s.Text()
-					if containsSentence(content) {
+					if containsSentence(s.Text()) {
 						append = true
 					}
 				}
@@ -269,7 +268,7 @@ func scoreNode(s *goquery.Selection) *candidate {
 		return c
 	}
 
-	switch s.Get(0).DataAtom.String() {
+	switch s.Get(0).Data {
 	case "div":
 		c.score += 5
 	case "pre", "td", "blockquote", "img":
@@ -332,8 +331,7 @@ func transformMisusedDivsIntoParagraphs(document *goquery.Document) {
 		nodes := s.Children().Nodes
 
 		if len(nodes) == 0 {
-			node := s.Get(0)
-			node.Data = "p"
+			s.Nodes[0].Data = "p"
 			return
 		}
 
@@ -344,8 +342,7 @@ func transformMisusedDivsIntoParagraphs(document *goquery.Document) {
 				"table", "ul":
 				return
 			default:
-				currentNode := s.Get(0)
-				currentNode.Data = "p"
+				s.Nodes[0].Data = "p"
 			}
 		}
 	})
