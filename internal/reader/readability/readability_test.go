@@ -14,6 +14,36 @@ import (
 	"golang.org/x/net/html"
 )
 
+func (c candidateList) String() string {
+	var output []string
+	for _, candidate := range c {
+		output = append(output, candidate.String())
+	}
+
+	return strings.Join(output, ", ")
+}
+
+func (c *candidate) String() string {
+	node := c.Node()
+	if node == nil {
+		return fmt.Sprintf("empty => %f", c.score)
+	}
+
+	id, _ := c.selection.Attr("id")
+	class, _ := c.selection.Attr("class")
+
+	switch {
+	case id != "" && class != "":
+		return fmt.Sprintf("%s#%s.%s => %f", node.DataAtom, id, class, c.score)
+	case id != "":
+		return fmt.Sprintf("%s#%s => %f", node.DataAtom, id, c.score)
+	case class != "":
+		return fmt.Sprintf("%s.%s => %f", node.DataAtom, class, c.score)
+	}
+
+	return fmt.Sprintf("%s => %f", node.DataAtom, c.score)
+}
+
 func BenchmarkExtractContent(b *testing.B) {
 	var testCases = map[string][]byte{
 		"miniflux_github.html":    {},

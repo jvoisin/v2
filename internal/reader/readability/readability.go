@@ -4,7 +4,6 @@
 package readability // import "miniflux.app/v2/internal/reader/readability"
 
 import (
-	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -38,37 +37,7 @@ func (c *candidate) Node() *html.Node {
 	return c.selection.Get(0)
 }
 
-func (c *candidate) String() string {
-	node := c.Node()
-	if node == nil {
-		return fmt.Sprintf("empty => %f", c.score)
-	}
-
-	id, _ := c.selection.Attr("id")
-	class, _ := c.selection.Attr("class")
-
-	switch {
-	case id != "" && class != "":
-		return fmt.Sprintf("%s#%s.%s => %f", node.DataAtom, id, class, c.score)
-	case id != "":
-		return fmt.Sprintf("%s#%s => %f", node.DataAtom, id, c.score)
-	case class != "":
-		return fmt.Sprintf("%s.%s => %f", node.DataAtom, class, c.score)
-	}
-
-	return fmt.Sprintf("%s => %f", node.DataAtom, c.score)
-}
-
 type candidateList map[*html.Node]*candidate
-
-func (c candidateList) String() string {
-	var output []string
-	for _, candidate := range c {
-		output = append(output, candidate.String())
-	}
-
-	return strings.Join(output, ", ")
-}
 
 // ExtractContent returns relevant content.
 func ExtractContent(page io.Reader) (baseURL string, extractedContent string, err error) {
