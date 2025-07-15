@@ -52,6 +52,13 @@ func (s *Storage) UserByFeverToken(token string) (*model.User, error) {
 	}
 }
 
+func (s *Storage) IsFeverUsed() bool {
+	query := `SELECT true FROM integrations WHERE fever_enabled=true`
+	var result bool
+	s.db.QueryRow(query).Scan(&result)
+	return result
+}
+
 // GoogleReaderUserCheckPassword validates the Google Reader hashed password.
 func (s *Storage) GoogleReaderUserCheckPassword(username, password string) error {
 	var hash string
@@ -103,6 +110,13 @@ func (s *Storage) GoogleReaderUserGetIntegration(username string) (*model.Integr
 	}
 
 	return &integration, nil
+}
+
+func (s *Storage) IsGoogleReaderUsed() bool {
+	query := `SELECT true FROM integrations WHERE googlereader_enabled=true`
+	var result bool
+	s.db.QueryRow(query).Scan(&result)
+	return result
 }
 
 // Integration returns user integration settings.

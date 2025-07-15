@@ -25,6 +25,16 @@ func newMiddleware(s *storage.Storage) *middleware {
 	return &middleware{s}
 }
 
+func (m *middleware) maybeUnauthorizedGoogleReader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if m.store.IsGoogleReaderUsed() {
+			next.ServeHTTP(w, r)
+		} else {
+			Unauthorized(w, r)
+		}
+	})
+}
+
 func (m *middleware) handleCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
