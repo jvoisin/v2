@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"miniflux.app/v2/internal/http/request"
+	"miniflux.app/v2/internal/http/response"
 	"miniflux.app/v2/internal/http/response/json"
 	"miniflux.app/v2/internal/storage"
 )
@@ -19,6 +20,20 @@ type middleware struct {
 
 func newMiddleware(s *storage.Storage) *middleware {
 	return &middleware{s}
+}
+
+func (m *middleware) maybeUnauthorizedFever(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if m.store.IsFeverUsed() {
+			next.ServeHTTP(w, r)
+		} else {
+			builder := response.New(w, r)
+			builder.WithStatus(http.StatusUnauthorized)
+			builder.WithHeader("Content-Type", "text/plain")
+			builder.WithBody("Unauthorized")
+			builder.Write()
+		}
+	})
 }
 
 func (m *middleware) serve(next http.Handler) http.Handler {
