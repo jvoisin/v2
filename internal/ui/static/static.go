@@ -113,19 +113,22 @@ func GenerateStylesheetsBundles() error {
 }
 
 // GenerateJavascriptBundles creates JS bundles.
-func GenerateJavascriptBundles() error {
+func GenerateJavascriptBundles(webauthnEnabled bool) error {
 	var bundles = map[string][]string{
 		"app": {
 			"js/tt.js", // has to be first
 			"js/touch_handler.js",
 			"js/keyboard_handler.js",
 			"js/modal_handler.js",
-			"js/webauthn_handler.js",
 			"js/app.js",
 		},
 		"service-worker": {
 			"js/service_worker.js",
 		},
+	}
+
+	if webauthnEnabled {
+		bundles["app"] = append(bundles["app"], "js/webauthn_handler.js")
 	}
 
 	JavascriptBundles = make(map[string]asset, len(bundles))

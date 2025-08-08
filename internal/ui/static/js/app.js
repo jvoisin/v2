@@ -1113,6 +1113,7 @@ function initializeServiceWorker() {
  * Initialize WebAuthn handlers if supported.
  */
 function initializeWebAuthn() {
+    if (typeof WebAuthnHandler !== 'function') return;
     if (!WebAuthnHandler.isWebAuthnSupported()) return;
 
     const webauthnHandler = new WebAuthnHandler();
