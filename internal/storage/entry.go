@@ -260,8 +260,8 @@ func (s *Storage) GetReadTime(feedID int64, entryHash string) int {
 	return result
 }
 
-// cleanupEntries deletes from the database entries marked as "removed" and not visible anymore in the feed.
-func (s *Storage) cleanupEntries(feedID int64, entryHashes []string) error {
+// deleteRemovedNonexistentEntries deletes from the database entries marked as "removed" and not visible anymore in the feed.
+func (s *Storage) deleteRemovedNonexistentEntries(feedID int64, entryHashes []string) error {
 	query := `
 		DELETE FROM
 			entries
@@ -272,6 +272,38 @@ func (s *Storage) cleanupEntries(feedID int64, entryHashes []string) error {
 	`
 	if _, err := s.db.Exec(query, feedID, model.EntryStatusRemoved, pq.Array(entryHashes)); err != nil {
 		return fmt.Errorf(`store: unable to cleanup entries: %v`, err)
+	}
+
+	return nil
+}
+
+// deleteContentRemovedEntries deletes the content and corresponding enclosures
+// of entries marked as "removed", and only keeps their metadata.
+func (s *Storage) DeleteContentRemovedEntries() error {
+	query := `
+		UPDATE
+			entries
+		SET
+			title='',
+			content=NULL,
+			url='',
+			author=NULL
+		WHERE
+			status=$2
+	`
+	if _, err := s.db.Exec(query, model.EntryStatusRemoved); err != nil {
+		return fmt.Errorf(`store: unable to delete removed entries: %v`, err)
+	}
+
+	query = `
+		DELETE FROM
+			enclosures
+		WHERE
+		 	enclosures.entry_id IN
+				(SELECT id FROM entries WHERE status=$2)
+	`
+	if _, err := s.db.Exec(query, model.EntryStatusRemoved); err != nil {
+		return fmt.Errorf(`store: unable to delete enclosures from removed entries: %v`, err)
 	}
 
 	return nil
@@ -324,7 +356,7 @@ func (s *Storage) RefreshFeedEntries(userID, feedID int64, entries model.Entries
 	}
 
 	go func() {
-		if err := s.cleanupEntries(feedID, entryHashes); err != nil {
+		if err := s.deleteRemovedNonexistentEntries(feedID, entryHashes); err != nil {
 			slog.Error("Unable to cleanup entries",
 				slog.Int64("user_id", userID),
 				slog.Int64("feed_id", feedID),

@@ -46,4 +46,10 @@ func runCleanupTasks(store *storage.Storage) {
 			metric.ArchiveEntriesDuration.WithLabelValues(model.EntryStatusUnread).Observe(time.Since(startTime).Seconds())
 		}
 	}
+
+	if err := store.DeleteContentRemovedEntries(); err != nil {
+		slog.Error("Unable to delete the content of removed entries", slog.Any("error", err))
+	} else {
+		slog.Info("Deleting content of removed entries completed")
+	}
 }
