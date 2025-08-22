@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"miniflux.app/v2/internal/locale"
+	"miniflux.app/v2/internal/model"
 )
 
 func TestDict(t *testing.T) {
@@ -157,5 +158,13 @@ func TestFormatFileSize(t *testing.T) {
 		if result != scenario.expected {
 			t.Errorf(`Unexpected result, got %q instead of %q for %d`, result, scenario.expected, scenario.input)
 		}
+	}
+}
+
+func TestCSP(t *testing.T) {
+	want := `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src * data:; media-src *; frame-src *; style-src 'nonce-1234'; script-src 'nonce-1234' 'strict-dynamic'; font-src test.com; require-trusted-types-for 'script'; trusted-types html url; ">`
+	got := csp(&model.User{ExternalFontHosts: "test.com"}, "1234")
+	if got != want {
+		t.Errorf(`Unexpected result, got %q instead of %q`, got, want)
 	}
 }
