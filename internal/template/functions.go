@@ -33,6 +33,7 @@ type funcMap struct {
 func (f *funcMap) Map() template.FuncMap {
 	return template.FuncMap{
 		"contains":         strings.Contains,
+		"csp":              csp,
 		"startsWith":       strings.HasPrefix,
 		"formatFileSize":   formatFileSize,
 		"dict":             dict,
@@ -114,6 +115,42 @@ func (f *funcMap) Map() template.FuncMap {
 			return ""
 		},
 	}
+}
+
+func csp(user *model.User, nonce string) string {
+	order := [...]string{"default-src", "img-src", "media-src", "frame-src", "style-src", "script-src", "font-src", "require-trusted-types-for", "trusted-types"}
+	policies := map[string]string{
+		"default-src":               "'none'",
+		"img-src":                   "* data:",
+		"media-src":                 "*",
+		"frame-src":                 "*",
+		"style-src":                 "'nonce-" + nonce + "'",
+		"script-src":                "'nonce-" + nonce + "' 'strict-dynamic'",
+		"require-trusted-types-for": "'script'",
+		"trusted-types":             "html url",
+	}
+
+	if user != nil {
+		if user.ExternalFontHosts != "" {
+			policies["font-src"] = user.ExternalFontHosts
+			if user.Stylesheet != "" {
+				policies["style-src"] += " " + user.ExternalFontHosts
+			}
+		}
+	}
+
+	var policy strings.Builder
+	// This is needed to always have the same order.
+	for _, key := range order {
+		if value, ok := policies[key]; ok {
+			policy.WriteString(key)
+			policy.WriteString(" ")
+			policy.WriteString(value)
+			policy.WriteString("; ")
+		}
+	}
+
+	return `<meta http-equiv="Content-Security-Policy" content="` + policy.String() + `">`
 }
 
 func dict(values ...any) (map[string]any, error) {
