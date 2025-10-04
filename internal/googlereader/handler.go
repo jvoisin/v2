@@ -126,8 +126,7 @@ func checkOutputFormat(r *http.Request) error {
 		output = request.QueryStringParam(r, "output", "")
 	}
 	if output != "json" {
-		err := fmt.Errorf("googlereader: only json output is supported")
-		return err
+		return errors.New("googlereader: only json output is supported")
 	}
 	return nil
 }
