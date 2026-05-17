@@ -44,6 +44,10 @@ type RequestBuilder struct {
 	disableCompression bool
 	proxyRotator       *proxyrotator.ProxyRotator
 	feedProxyURL       string
+
+	// keepaliveClient is lazily built by the first ExecuteRequestKeepalive
+	// call and reused by subsequent calls. Close() releases it.
+	keepaliveClient *http.Client
 }
 
 func NewRequestBuilder() *RequestBuilder {
@@ -141,6 +145,54 @@ func (r *RequestBuilder) WithoutCompression() *RequestBuilder {
 }
 
 func (r *RequestBuilder) ExecuteRequest(requestURL string) (*http.Response, error) {
+	client, err := r.newClient()
+	if err != nil {
+		return nil, err
+	}
+	req, err := r.prepareRequest(requestURL)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Connection", "close")
+	return r.send(client, req)
+}
+
+// ExecuteRequestKeepalive sends a request using a builder-internal HTTP client
+// that is lazily built on the first call and reused by subsequent calls. The
+// underlying TCP/TLS connection can therefore be reused across calls (HTTP
+// keep-alive, HTTP/2 multiplexing), which nice when probing several URLs
+// against the same host, for example in during feeds URL discovery.
+//
+// When done with the connection pool, don't forget to call Close() to release it.
+// It's worth noting that because the client is built only once, the proxy
+// rotator advances only on the first call.
+func (r *RequestBuilder) ExecuteRequestKeepalive(requestURL string) (*http.Response, error) {
+	if r.keepaliveClient == nil {
+		client, err := r.newClient()
+		if err != nil {
+			return nil, err
+		}
+		r.keepaliveClient = client
+	}
+	req, err := r.prepareRequest(requestURL)
+	if err != nil {
+		return nil, err
+	}
+	return r.send(r.keepaliveClient, req)
+}
+
+// Close releases idle connections held by the keep-alive client, if any.
+// Safe to call even if ExecuteRequestKeepalive was never used.
+func (r *RequestBuilder) Close() {
+	if r.keepaliveClient != nil {
+		r.keepaliveClient.CloseIdleConnections()
+		r.keepaliveClient = nil
+	}
+}
+
+// newClient builds a configured *http.Client from the builder's settings.
+// The proxy rotator advances once per call.
+func (r *RequestBuilder) newClient() (*http.Client, error) {
 	var clientProxyURL *url.URL
 
 	switch {
@@ -231,14 +283,13 @@ func (r *RequestBuilder) ExecuteRequest(requestURL string) (*http.Response, erro
 		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	}
 
-	var clientProxyURLRedacted string
 	if clientProxyURL != nil {
 		transport.Proxy = http.ProxyURL(clientProxyURL)
-		clientProxyURLRedacted = clientProxyURL.Redacted()
 	}
 
 	client := &http.Client{
-		Timeout: r.clientTimeout,
+		Timeout:   r.clientTimeout,
+		Transport: transport,
 	}
 
 	if r.withoutRedirects {
@@ -247,14 +298,28 @@ func (r *RequestBuilder) ExecuteRequest(requestURL string) (*http.Response, erro
 		}
 	}
 
-	client.Transport = transport
+	var clientProxyURLRedacted string
+	if clientProxyURL != nil {
+		clientProxyURLRedacted = clientProxyURL.Redacted()
+	}
+	slog.Debug("Built HTTP client", slog.Group("client",
+		slog.Bool("without_redirects", r.withoutRedirects),
+		slog.Bool("use_app_client_proxy", r.useClientProxy),
+		slog.String("client_proxy_url", clientProxyURLRedacted),
+		slog.Bool("ignore_tls_errors", r.ignoreTLSErrors),
+		slog.Bool("disable_http2", r.disableHTTP2),
+	))
 
+	return client, nil
+}
+
+func (r *RequestBuilder) prepareRequest(requestURL string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header = r.headers
+	req.Header = r.headers.Clone()
 	if r.disableCompression {
 		req.Header.Set("Accept-Encoding", "identity")
 	} else {
@@ -267,19 +332,15 @@ func (r *RequestBuilder) ExecuteRequest(requestURL string) (*http.Response, erro
 		req.Header.Set("Accept", defaultAcceptHeader)
 	}
 
-	req.Header.Set("Connection", "close")
+	return req, nil
+}
 
+func (r *RequestBuilder) send(client *http.Client, req *http.Request) (*http.Response, error) {
 	slog.Debug("Making outgoing request", slog.Group("request",
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
 		slog.Any("headers", req.Header),
-		slog.Bool("without_redirects", r.withoutRedirects),
-		slog.Bool("use_app_client_proxy", r.useClientProxy),
-		slog.String("client_proxy_url", clientProxyURLRedacted),
-		slog.Bool("ignore_tls_errors", r.ignoreTLSErrors),
-		slog.Bool("disable_http2", r.disableHTTP2),
 	))
-
 	return client.Do(req)
 }
 
