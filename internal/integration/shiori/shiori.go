@@ -4,20 +4,14 @@
 package shiori // import "miniflux.app/v2/internal/integration/shiori"
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
-	"miniflux.app/v2/internal/config"
-	"miniflux.app/v2/internal/http/client"
+	"miniflux.app/v2/internal/integration/httputil"
 	"miniflux.app/v2/internal/urllib"
-	"miniflux.app/v2/internal/version"
 )
-
-const defaultClientTimeout = 10 * time.Second
 
 type Client struct {
 	baseURL  string
@@ -44,7 +38,7 @@ func (c *Client) CreateBookmark(entryURL, entryTitle string) error {
 		return fmt.Errorf("shiori: invalid API endpoint: %v", err)
 	}
 
-	requestBody, err := json.Marshal(&addBookmarkRequest{
+	response, err := httputil.DoJSONRequest(http.MethodPost, apiEndpoint, &addBookmarkRequest{
 		URL:           entryURL,
 		Title:         entryTitle,
 		Excerpt:       "",
@@ -52,26 +46,11 @@ func (c *Client) CreateBookmark(entryURL, entryTitle string) error {
 		CreateEbook:   false,
 		Public:        0,
 		Tags:          make([]string, 0),
+	}, map[string]string{
+		"Authorization": "Bearer " + token,
 	})
-
 	if err != nil {
-		return fmt.Errorf("shiori: unable to encode request body: %v", err)
-	}
-
-	request, err := http.NewRequest(http.MethodPost, apiEndpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		return fmt.Errorf("shiori: unable to create request: %v", err)
-	}
-
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "Miniflux/"+version.Version)
-	request.Header.Set("Authorization", "Bearer "+token)
-
-	httpClient := client.NewClientWithOptions(client.Options{Timeout: defaultClientTimeout, BlockPrivateNetworks: !config.Opts.IntegrationAllowPrivateNetworks()})
-
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("shiori: unable to send request: %v", err)
+		return fmt.Errorf("shiori: %w", err)
 	}
 	defer response.Body.Close()
 
@@ -88,25 +67,11 @@ func (c *Client) authenticate() (string, error) {
 		return "", fmt.Errorf("shiori: invalid API endpoint: %v", err)
 	}
 
-	requestBody, err := json.Marshal(&authRequest{Username: c.username, Password: c.password, RememberMe: false})
+	response, err := httputil.DoJSONRequest(http.MethodPost, apiEndpoint, &authRequest{Username: c.username, Password: c.password, RememberMe: false}, map[string]string{
+		"Accept": "application/json",
+	})
 	if err != nil {
-		return "", fmt.Errorf("shiori: unable to encode request body: %v", err)
-	}
-
-	request, err := http.NewRequest(http.MethodPost, apiEndpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		return "", fmt.Errorf("shiori: unable to create request: %v", err)
-	}
-
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "Miniflux/"+version.Version)
-
-	httpClient := client.NewClientWithOptions(client.Options{Timeout: defaultClientTimeout, BlockPrivateNetworks: !config.Opts.IntegrationAllowPrivateNetworks()})
-
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("shiori: unable to send request: %v", err)
+		return "", fmt.Errorf("shiori: %w", err)
 	}
 	defer response.Body.Close()
 

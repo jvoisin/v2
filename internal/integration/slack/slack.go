@@ -6,21 +6,15 @@
 package slack // import "miniflux.app/v2/internal/integration/slack"
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
-	"miniflux.app/v2/internal/config"
-	"miniflux.app/v2/internal/http/client"
+	"miniflux.app/v2/internal/integration/httputil"
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/urllib"
-	"miniflux.app/v2/internal/version"
 )
 
-const defaultClientTimeout = 10 * time.Second
 const slackMsgColor = "#5865F2"
 
 type Client struct {
@@ -33,7 +27,13 @@ func NewClient(webhookURL string) *Client {
 
 func (c *Client) SendSlackMsg(feed *model.Feed, entries model.Entries) error {
 	for _, entry := range entries {
-		requestBody, err := json.Marshal(&slackMessage{
+		slog.Debug("Sending Slack notification",
+			slog.String("webhookURL", c.webhookURL),
+			slog.String("title", feed.Title),
+			slog.String("entry_url", entry.URL),
+		)
+
+		response, err := httputil.DoJSONRequest(http.MethodPost, c.webhookURL, &slackMessage{
 			Attachments: []slackAttachments{
 				{
 					Title: "RSS feed update from Miniflux",
@@ -64,29 +64,9 @@ func (c *Client) SendSlackMsg(feed *model.Feed, entries model.Entries) error {
 					},
 				},
 			},
-		})
+		}, nil)
 		if err != nil {
-			return fmt.Errorf("slack: unable to encode request body: %v", err)
-		}
-
-		request, err := http.NewRequest(http.MethodPost, c.webhookURL, bytes.NewReader(requestBody))
-		if err != nil {
-			return fmt.Errorf("slack: unable to create request: %v", err)
-		}
-
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("User-Agent", "Miniflux/"+version.Version)
-
-		slog.Debug("Sending Slack notification",
-			slog.String("webhookURL", c.webhookURL),
-			slog.String("title", feed.Title),
-			slog.String("entry_url", entry.URL),
-		)
-
-		httpClient := client.NewClientWithOptions(client.Options{Timeout: defaultClientTimeout, BlockPrivateNetworks: !config.Opts.IntegrationAllowPrivateNetworks()})
-		response, err := httpClient.Do(request)
-		if err != nil {
-			return fmt.Errorf("slack: unable to send request: %v", err)
+			return fmt.Errorf("slack: %w", err)
 		}
 		response.Body.Close()
 

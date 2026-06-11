@@ -6,22 +6,14 @@
 package readwise // import "miniflux.app/v2/internal/integration/readwise"
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
-	"miniflux.app/v2/internal/config"
-	"miniflux.app/v2/internal/http/client"
-	"miniflux.app/v2/internal/version"
+	"miniflux.app/v2/internal/integration/httputil"
 )
 
-const (
-	readwiseApiEndpoint  = "https://readwise.io/api/v3/save/"
-	defaultClientTimeout = 10 * time.Second
-)
+const readwiseApiEndpoint = "https://readwise.io/api/v3/save/"
 
 type Client struct {
 	apiKey string
@@ -36,27 +28,13 @@ func (c *Client) CreateDocument(entryURL string) error {
 		return errors.New("readwise: missing API key")
 	}
 
-	requestBody, err := json.Marshal(&readwiseDocument{
+	response, err := httputil.DoJSONRequest(http.MethodPost, readwiseApiEndpoint, &readwiseDocument{
 		URL: entryURL,
+	}, map[string]string{
+		"Authorization": "Token " + c.apiKey,
 	})
-
 	if err != nil {
-		return fmt.Errorf("readwise: unable to encode request body: %v", err)
-	}
-
-	request, err := http.NewRequest(http.MethodPost, readwiseApiEndpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		return fmt.Errorf("readwise: unable to create request: %v", err)
-	}
-
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "Miniflux/"+version.Version)
-	request.Header.Set("Authorization", "Token "+c.apiKey)
-
-	httpClient := client.NewClientWithOptions(client.Options{Timeout: defaultClientTimeout, BlockPrivateNetworks: !config.Opts.IntegrationAllowPrivateNetworks()})
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("readwise: unable to send request: %v", err)
+		return fmt.Errorf("readwise: %w", err)
 	}
 	defer response.Body.Close()
 
